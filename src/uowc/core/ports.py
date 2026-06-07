@@ -127,10 +127,14 @@ class OpticalEffect(Protocol):
 
 @runtime_checkable
 class RefractiveEffect(Protocol):
-    """Effect that imposes a refractive-index field (e.g. thermocline/halocline).
+    """Effect that contributes to the refractive-index field (e.g. turbulence,
+    thermocline/halocline).
 
-    Supplies the index and its spatial gradient so the transport engine can bend rays
-    during free flight. Batched.
+    Supplies this effect's *additive contribution* to the refractive index (around the
+    medium's base index) and that contribution's spatial gradient, so a medium composes
+    ``n(x) = n0 + sum_i`` and the transport engine can bend rays during free flight. The
+    ``index`` and ``gradient`` methods return this contribution, not the absolute field.
+    Batched.
     """
 
     @property
