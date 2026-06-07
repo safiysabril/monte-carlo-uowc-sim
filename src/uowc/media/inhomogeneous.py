@@ -20,6 +20,7 @@ import numpy as np
 from uowc.core import EnvironmentalState, LocalOpticalState, Region
 from uowc.core.ports import Acceleration, Domain, OpticalField, OpticalPropertyModel
 from uowc.core.units import FloatArray, Vector3
+from uowc.media.domain import BoxDomain
 from uowc.media.profiles import ChlorophyllProfile
 
 __all__ = ["InhomogeneousMedium"]
@@ -56,20 +57,6 @@ class _DepthOpticalField:
     def local_state(self, position: Vector3, time_s: float = 0.0) -> LocalOpticalState:
         iop = self._iop_at(np.asarray(position, dtype=np.float64))
         return LocalOpticalState(iop=iop, refractive_index=self.refractive_index_value)
-
-
-@dataclass(frozen=True, slots=True)
-class _BoxDomain:
-    """Axis-aligned box domain."""
-
-    region: Region
-
-    def contains(self, positions: FloatArray) -> FloatArray:
-        p = np.asarray(positions, dtype=np.float64)
-        return np.all((p >= self.region.lower) & (p <= self.region.upper), axis=-1)
-
-    def bounds(self) -> Region:
-        return self.region
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,7 +125,7 @@ class InhomogeneousMedium:
         )
         return cls(
             field=optical_field,
-            domain=_BoxDomain(region=bounds),
+            domain=BoxDomain(region=bounds),
             acceleration=_SampledMajorant(
                 optical_field=optical_field,
                 samples=majorant_samples,
