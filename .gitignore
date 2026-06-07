@@ -216,3 +216,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- project research outputs (keep directories via .gitkeep) ---
+/data/**
+!/data/**/
+!/data/**/.gitkeep
+/figures/**
+!/figures/**/
+!/figures/**/.gitkeep
+

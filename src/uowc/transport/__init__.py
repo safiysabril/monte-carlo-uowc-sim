@@ -1,0 +1,1 @@
+"""Photon transport engine (adapter)."""

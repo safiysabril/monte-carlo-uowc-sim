@@ -1,0 +1,14 @@
+# Flagship campaign: quantify the homogeneous-approximation error.
+# Expands to one run per (scenario x geometry x water_type x range x seed).
+name: medium_representation_study
+base: configs/base.yaml
+axes:
+  scenario: [I, II, III]
+  geometry: [vertical, horizontal, oblique]
+  water_type: [clear_ocean, coastal, turbid_harbor]
+  range_m: [5, 10, 20, 40]
+  seed: [1, 2, 3, 4, 5]
+homogenization_rules: [surface, path_average, optical_depth]   # studied variable (Scenario I)
+outputs:
+  raw: data/raw
+  metrics: data/processed

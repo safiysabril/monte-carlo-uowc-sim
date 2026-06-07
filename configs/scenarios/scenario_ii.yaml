@@ -1,0 +1,7 @@
+# Scenario II - depth-dependent medium (same optical model as I).
+scenario: II
+medium:
+  type: inhomogeneous
+  optical_model: haltrin
+  profile: kameda_dcm
+  effects: []

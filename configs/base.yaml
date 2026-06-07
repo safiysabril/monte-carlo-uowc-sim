@@ -1,0 +1,26 @@
+# Base configuration: shared defaults. Experiments/campaigns override these keys.
+seed: 20260607
+rng:
+  bit_generator: PCG64
+  reference_mode: true          # single-thread, bitwise-reproducible reference
+
+source:
+  wavelength_nm: 520            # blue-green
+  divergence_rad: 0.01
+
+geometry: vertical              # see configs/geometries.yaml
+water_type: clear_ocean        # see configs/water_types.yaml
+
+photons:
+  ladder: [1.0e4, 1.0e5, 1.0e6, 1.0e7]   # convergence study
+  production: 1.0e7
+
+transport:
+  algorithm: woodcock
+  estimator: next_event        # analog | next_event | forced
+  max_scatter_events: 1000
+
+output:
+  root: data
+  format: parquet
+  partition_by: [scenario, water_type, geometry, range_m, seed]

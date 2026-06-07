@@ -1,0 +1,7 @@
+# Scenario I - homogeneous baseline.
+scenario: I
+medium:
+  type: homogeneous
+  optical_model: haltrin
+  homogenization_rule: optical_depth   # surface | path_average | optical_depth
+  effects: []

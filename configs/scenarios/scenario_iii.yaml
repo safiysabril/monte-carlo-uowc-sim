@@ -1,0 +1,9 @@
+# Scenario III - depth-dependent medium + environmental effects.
+scenario: III
+medium:
+  type: inhomogeneous
+  optical_model: haltrin
+  profile: kameda_dcm
+  effects:
+    - type: turbulence      # parameters to be specified
+    - type: bubbles         # parameters to be specified

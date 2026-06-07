@@ -1,0 +1,3 @@
+# Concrete experiment instance. References the shared campaign definition.
+extends: configs/campaigns/medium_representation_study.yaml
+# Instance-specific overrides go here.

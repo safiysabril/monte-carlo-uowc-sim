@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "uowc"
+version = "0.0.0"
+description = "Research-grade Monte Carlo Underwater Optical Wireless Communication simulation framework"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+dependencies = [
+  "numpy>=1.26",
+  "scipy>=1.11",
+  "pandas>=2.1",
+  "pyarrow>=14.0",
+  "matplotlib>=3.8",
+  "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-cov>=4.1", "mypy>=1.8", "ruff>=0.3"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/uowc"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+  "verification: implementation-correctness tests",
+  "validation: physical-realism tests against references",
+  "slow: long-running tests",
+]
+
+[tool.mypy]
+python_version = "3.12"
+packages = ["uowc"]
+mypy_path = "src"
+strict = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "NPY"]

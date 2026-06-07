@@ -1,0 +1,14 @@
+# Environmental-parameter presets (inputs to the optical-property model).
+# Placeholder values to be set from references.
+clear_ocean:
+  chlorophyll_mg_m3: 0.03
+  cdom_inv_m: null
+  nap_g_m3: null
+coastal:
+  chlorophyll_mg_m3: 0.5
+  cdom_inv_m: null
+  nap_g_m3: null
+turbid_harbor:
+  chlorophyll_mg_m3: 3.0
+  cdom_inv_m: null
+  nap_g_m3: null

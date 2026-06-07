@@ -1,0 +1,22 @@
+# Link-geometry presets (held constant across a scenario comparison).
+vertical:
+  source_position_m: [0.0, 0.0, 0.0]
+  source_direction: [0.0, 0.0, -1.0]
+  receiver_position_m: [0.0, 0.0, -10.0]
+  receiver_normal: [0.0, 0.0, 1.0]
+  aperture_radius_m: 0.1
+  fov_rad: 0.35
+horizontal:
+  source_position_m: [0.0, 0.0, -20.0]
+  source_direction: [1.0, 0.0, 0.0]
+  receiver_position_m: [10.0, 0.0, -20.0]
+  receiver_normal: [-1.0, 0.0, 0.0]
+  aperture_radius_m: 0.1
+  fov_rad: 0.35
+oblique:
+  source_position_m: [0.0, 0.0, 0.0]
+  source_direction: [0.707, 0.0, -0.707]
+  receiver_position_m: [10.0, 0.0, -10.0]
+  receiver_normal: [-0.707, 0.0, 0.707]
+  aperture_radius_m: 0.1
+  fov_rad: 0.35
