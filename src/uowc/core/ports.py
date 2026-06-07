@@ -1,45 +1,49 @@
 """Core ports: the Protocol interfaces every adapter implements.
 
-Per docs/instructions/python.md these are structural ``typing.Protocol`` types
-(prefer Protocols over ABCs). They define contracts only - no algorithms.
+Structural ``typing.Protocol`` types (prefer Protocols, per python.md); contracts
+only - no algorithms. ``@runtime_checkable`` checks member *names* only; rely on mypy
+for full conformance.
 
-Note: ``@runtime_checkable`` enables ``isinstance`` checks against these Protocols,
-but it verifies *member names only*, not signatures or types. Rely on static type
-checking (mypy) for full conformance; use ``isinstance`` only for coarse
-plugin/registry guards.
-
-The five headline interfaces are :class:`OpticalPropertyModel`, :class:`Medium`,
-:class:`EnvironmentalEffect`, :class:`TransportEngine` and :class:`Metric`.
-:class:`PhaseFunction` and :class:`Rng` are supporting ports they reference.
+Headline interfaces: :class:`OpticalPropertyModel`; :class:`Medium`, composed from
+:class:`OpticalField`, :class:`Domain` and :class:`Acceleration`; the effect family
+:class:`ParameterEffect`, :class:`OpticalEffect` and :class:`RefractiveEffect`;
+:class:`TransportEngine`; and :class:`Metric` / :class:`ComparativeMetric`.
+:class:`PhaseFunction` and :class:`Rng` are supporting ports.
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 
+from uowc.core.config import SamplingConfig
 from uowc.core.environment import EnvironmentalState
-from uowc.core.geometry import Receiver, Source
-from uowc.core.results import MetricValue, RawResult
+from uowc.core.geometry import Receiver, Region, Source
+from uowc.core.results import MetricValue, RawResult, SeedTree, TransportOutput
 from uowc.core.state import IOP, LocalOpticalState
-from uowc.core.units import FloatArray, Vector3
+from uowc.core.units import BoolArray, FloatArray, IntArray, Vector3
 
 __all__ = [
     "PhaseFunction",
     "OpticalPropertyModel",
-    "EnvironmentalEffect",
+    "ParameterEffect",
+    "OpticalEffect",
+    "RefractiveEffect",
+    "OpticalField",
+    "Domain",
+    "Acceleration",
     "Medium",
     "Rng",
     "TransportEngine",
     "Metric",
+    "ComparativeMetric",
 ]
 
 
 @runtime_checkable
 class PhaseFunction(Protocol):
-    """Scattering phase function: angle sampler plus evaluator.
+    """Scattering phase function for one population: sampler plus evaluator.
 
-    Owns scattering directionality so it can be swapped per population without
-    subclassing. Sampling must be deterministic given the supplied uniform random
-    numbers (reproducibility).
+    Sampling must be deterministic given the supplied uniform random numbers.
     """
 
     @property
@@ -58,12 +62,9 @@ class PhaseFunction(Protocol):
 
 @runtime_checkable
 class OpticalPropertyModel(Protocol):
-    """Environmental parameters -> inherent optical properties.
-
-    Spatially agnostic: depends only on an :class:`EnvironmentalState` and the
-    wavelength, never on position, transport, metrics, or storage (see
-    scientific-modelling.md). Implementations should be vectorized so array-valued
-    inputs yield array-valued :class:`IOP` fields.
+    """Environmental parameters -> inherent optical properties (incl. the scattering
+    mixture). Spatially agnostic; depends only on an :class:`EnvironmentalState` and
+    wavelength (see scientific-modelling.md). Should be vectorized.
     """
 
     @property
@@ -72,109 +73,189 @@ class OpticalPropertyModel(Protocol):
         ...
 
     def evaluate(self, state: EnvironmentalState, wavelength_nm: float) -> IOP:
-        """Return the IOPs for ``state`` at the given wavelength."""
+        """Return the IOPs (absorption + scattering mixture) for ``state``."""
         ...
 
 
 @runtime_checkable
-class EnvironmentalEffect(Protocol):
-    """Composable modifier of local optical state.
+class ParameterEffect(Protocol):
+    """Effect that modifies environmental parameters *before* the optical model.
 
-    A pure transformation of :class:`LocalOpticalState`, plus a bound on the
-    extinction it may introduce (so a medium can build a valid Woodcock majorant).
-    Effects are composed as an ordered sequence by a medium and must not depend on
-    transport, metrics, storage, or plotting.
+    The right layer for constituent changes (e.g. suspended sediment adding NAP,
+    chlorophyll variation), so the bio-optical coupling stays consistent. Batched:
+    operates on a (possibly array-valued) :class:`EnvironmentalState`.
     """
 
     @property
-    def name(self) -> str:
-        """Stable identifier recorded in run metadata (e.g. ``"bubbles"``)."""
-        ...
+    def name(self) -> str: ...
 
     def apply(
-        self,
-        state: LocalOpticalState,
-        position: Vector3,
-        time_s: float = 0.0,
-    ) -> LocalOpticalState:
-        """Return the effect-modified optical state at ``position`` and ``time_s``."""
+        self, state: EnvironmentalState, positions: FloatArray, time_s: float = 0.0
+    ) -> EnvironmentalState:
+        """Return modified environmental parameters at ``positions``."""
         ...
 
-    def max_extinction_factor(self) -> float:
-        """Upper bound (>= 1) on the multiplicative increase this effect can apply
-        to the local attenuation coefficient anywhere in the domain."""
+
+@runtime_checkable
+class OpticalEffect(Protocol):
+    """Effect that modifies local optical state *after* the optical model.
+
+    E.g. a bubble layer adding a scattering population. Provides a batched extinction
+    contribution for the transport hot path and an additive, *regional* majorant bound
+    (not a global scalar), so the medium's accelerator stays tight.
+    """
+
+    @property
+    def name(self) -> str: ...
+
+    def apply(
+        self, state: LocalOpticalState, position: Vector3, time_s: float = 0.0
+    ) -> LocalOpticalState:
+        """Return the effect-modified optical state at one point."""
+        ...
+
+    def extinction_contribution(
+        self, positions: FloatArray, time_s: float = 0.0
+    ) -> FloatArray:
+        """Additive extinction [m^-1] contributed at each position, shape ``(N,)``."""
+        ...
+
+    def extinction_bound(self, region: Region) -> float:
+        """Upper bound on the additive extinction introduced anywhere in ``region``."""
+        ...
+
+
+@runtime_checkable
+class RefractiveEffect(Protocol):
+    """Effect that imposes a refractive-index field (e.g. thermocline/halocline).
+
+    Supplies the index and its spatial gradient so the transport engine can bend rays
+    during free flight. Batched.
+    """
+
+    @property
+    def name(self) -> str: ...
+
+    def index(self, positions: FloatArray, time_s: float = 0.0) -> FloatArray:
+        """Refractive index [dimensionless] at each position, shape ``(N,)``."""
+        ...
+
+    def gradient(self, positions: FloatArray, time_s: float = 0.0) -> FloatArray:
+        """Refractive-index gradient [m^-1], shape ``(N, 3)``."""
+        ...
+
+
+@runtime_checkable
+class OpticalField(Protocol):
+    """Spatial query of optical properties (one of the three medium capabilities).
+
+    Scalar fields are batched for the delta-tracking hot path; the full
+    :class:`LocalOpticalState` (including the scattering mixture) is returned per point
+    at the rarer real-interaction events.
+    """
+
+    def extinction(self, positions: FloatArray, time_s: float = 0.0) -> FloatArray:
+        """Beam attenuation ``c(x)`` [m^-1], shape ``(N,)`` for positions ``(N, 3)``."""
+        ...
+
+    def refractive_index(self, positions: FloatArray, time_s: float = 0.0) -> FloatArray:
+        """Refractive index, shape ``(N,)`` (for arrival time and ray bending)."""
+        ...
+
+    def refractive_index_gradient(
+        self, positions: FloatArray, time_s: float = 0.0
+    ) -> FloatArray:
+        """Refractive-index gradient [m^-1], shape ``(N, 3)``."""
+        ...
+
+    def local_state(self, position: Vector3, time_s: float = 0.0) -> LocalOpticalState:
+        """Full effective optical state at a single interaction point."""
+        ...
+
+
+@runtime_checkable
+class Domain(Protocol):
+    """Spatial extent of the simulation (one of the three medium capabilities).
+
+    Surface/bottom interaction physics is handled separately by a boundary, not here.
+    """
+
+    def contains(self, positions: FloatArray) -> BoolArray:
+        """Whether each position lies inside the domain, shape ``(N,)``."""
+        ...
+
+    def bounds(self) -> Region:
+        """Axis-aligned bounds of the domain."""
+        ...
+
+
+@runtime_checkable
+class Acceleration(Protocol):
+    """Woodcock acceleration structure (one of the three medium capabilities).
+
+    Kept separate so a non-Woodcock transport need not provide a majorant.
+    """
+
+    def majorant(self, region: Region) -> float:
+        """Upper bound ``c_max >= c(x)`` within ``region`` [m^-1]; regional, so a
+        localized high-extinction layer does not inflate the bound everywhere."""
         ...
 
 
 @runtime_checkable
 class Medium(Protocol):
-    """Spatial distribution of optical properties - the transport-facing query.
+    """The transport-facing medium: a composition of three decoupled capabilities.
 
-    A medium composes an :class:`OpticalPropertyModel` with a spatial parameter
-    field and an ordered list of :class:`EnvironmentalEffect`; it organizes
-    coefficients in space but does not generate them (see mediums.md). It must
-    expose a majorant that bounds local extinction everywhere - including effect
-    contributions - for Woodcock delta tracking.
+    Concrete mediums compose an :class:`OpticalPropertyModel`, a spatial parameter
+    field, and the effect family, exposing the result as a field, a domain and an
+    accelerator (see mediums.md).
     """
 
-    def extinction(self, positions: FloatArray, time_s: float = 0.0) -> FloatArray:
-        """Beam-attenuation coefficient ``c(x)`` [m^-1] for a batch of positions of
-        shape ``(N, 3)``, returning shape ``(N,)``. Hot path for delta-tracking
-        accept/reject; implementations must be vectorized."""
-        ...
+    @property
+    def field(self) -> OpticalField: ...
 
-    def local_state(self, position: Vector3, time_s: float = 0.0) -> LocalOpticalState:
-        """Full effective optical state at a single interaction point (phase function
-        and refractive index included), after profile and effects."""
-        ...
+    @property
+    def domain(self) -> Domain: ...
 
-    def majorant_extinction(self) -> float:
-        """Domain-wide upper bound ``c_max >= c(x)`` used to sample Woodcock free
-        paths [m^-1]. (A regional majorant is a planned efficiency refinement.)"""
-        ...
-
-    def contains(self, position: Vector3) -> bool:
-        """Whether ``position`` lies within the simulation domain. Surface/bottom
-        interaction physics is handled by a separate boundary, not here."""
-        ...
+    @property
+    def acceleration(self) -> Acceleration: ...
 
 
 @runtime_checkable
 class Rng(Protocol):
     """Seeded, splittable random source for reproducible, parallel-safe sampling.
 
-    Stream assignment must be independent of execution order and worker count, so
-    results reproduce regardless of parallel layout (see research-methodology.md).
-    The full seed tree is recorded in run metadata.
+    Stream assignment is independent of execution order and worker count; the full
+    seed hierarchy is recoverable via :meth:`seed_tree`.
     """
 
     @property
-    def seed(self) -> int:
-        """Root seed of this stream."""
-        ...
+    def seed(self) -> int: ...
 
-    def uniform(self, size: int) -> FloatArray:
-        """Draw ``size`` i.i.d. uniform variates in [0, 1)."""
-        ...
+    def uniform(self, shape: int | tuple[int, ...] = 1) -> FloatArray: ...
 
-    def spawn(self, stream: int) -> "Rng":
-        """Return an independent child stream deterministically keyed by ``stream``."""
-        ...
+    def normal(self, shape: int | tuple[int, ...] = 1) -> FloatArray: ...
+
+    def integers(
+        self, low: int, high: int, shape: int | tuple[int, ...] = 1
+    ) -> IntArray: ...
+
+    def spawn(self, stream: int) -> "Rng": ...
+
+    def seed_tree(self) -> SeedTree: ...
 
 
 @runtime_checkable
 class TransportEngine(Protocol):
-    """Propagates photons through a medium and records detections.
+    """Propagates photons through a medium and records detections plus tallies.
 
-    The same engine is used for every scenario; scenario differences arise only from
-    the injected medium (see transport.md). It must not generate optical
-    coefficients, compute metrics, write files, or plot.
+    The same engine serves every scenario; differences come only from the injected
+    medium (see transport.md). It returns a :class:`TransportOutput` - provenance is
+    attached by orchestration, not by transport.
     """
 
     @property
-    def name(self) -> str:
-        """Stable identifier recorded in run metadata (e.g. ``"woodcock"``)."""
-        ...
+    def name(self) -> str: ...
 
     def run(
         self,
@@ -182,25 +263,30 @@ class TransportEngine(Protocol):
         source: Source,
         receiver: Receiver,
         rng: Rng,
-    ) -> RawResult:
-        """Launch ``source.n_photons`` photons and return detections plus tallies."""
-        ...
+        config: SamplingConfig,
+    ) -> TransportOutput: ...
 
 
 @runtime_checkable
 class Metric(Protocol):
-    """Transforms raw transport results into a reported value with uncertainty.
-
-    Operates only on a :class:`RawResult`; must not launch photons, modify transport,
-    or import plotting (see metrics.md). Identical code runs on in-memory results or
-    results read back from Parquet.
+    """Single-run metric: :class:`RawResult` -> :class:`MetricValue` with uncertainty
+    (see metrics.md). Must not launch photons, modify transport, or import plotting.
     """
 
     @property
-    def name(self) -> str:
-        """Stable identifier (e.g. ``"rms_delay_spread"``)."""
-        ...
+    def name(self) -> str: ...
 
-    def compute(self, result: RawResult) -> MetricValue:
-        """Compute the metric, with uncertainty, from a single run."""
-        ...
+    def compute(self, result: RawResult) -> MetricValue: ...
+
+
+@runtime_checkable
+class ComparativeMetric(Protocol):
+    """Multi-run metric over an ordered set of results - the home for the headline
+    research outputs: scenario differences (I vs II, II vs III) and convergence /
+    sensitivity curves.
+    """
+
+    @property
+    def name(self) -> str: ...
+
+    def compare(self, results: Sequence[RawResult]) -> MetricValue: ...
