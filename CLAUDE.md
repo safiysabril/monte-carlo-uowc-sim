@@ -146,6 +146,7 @@ Consult the documentation relevant to the task being performed.
 | Metrics and analysis   | docs/instructions/metrics.md              |
 | Data management        | docs/instructions/data.md                 |
 | Visualization          | docs/instructions/visualization.md        |
+| Python conventions | docs/instructions/python.md |
 
 Load only the documentation relevant to the current task.
 
