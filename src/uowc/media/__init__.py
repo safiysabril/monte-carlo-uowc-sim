@@ -5,7 +5,9 @@ in space. Depends on the core ports and value objects only.
 """
 from __future__ import annotations
 
+from uowc.media.boundaries import AirWaterSurface, LambertianBottom
 from uowc.media.domain import BoxDomain
+from uowc.media.fields import ExtrapolationPolicy, GriddedScalarField
 from uowc.media.homogeneous import HomogeneousMedium
 from uowc.media.homogenization import DepthAverage, HomogenizationRule, SurfaceValue
 from uowc.media.inhomogeneous import InhomogeneousMedium
@@ -15,6 +17,10 @@ __all__ = [
     "ChlorophyllProfile",
     "KamedaModel",
     "BoxDomain",
+    "AirWaterSurface",
+    "LambertianBottom",
+    "GriddedScalarField",
+    "ExtrapolationPolicy",
     "HomogenizationRule",
     "SurfaceValue",
     "DepthAverage",

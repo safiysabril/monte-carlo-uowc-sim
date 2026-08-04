@@ -194,6 +194,34 @@ def test_null_collisions_preserve_conservation() -> None:
     assert total == pytest.approx(t.launched)
 
 
+def test_no_binned_tallies_by_default() -> None:
+    medium = make_medium(_ConstField(0.1, 0.0))
+    source, receiver = collimated(10.0)
+    out = WoodcockDeltaTracker().run(
+        medium, source, receiver, NumpyRng(6), SamplingConfig(n_photons=10, estimator="analog")
+    )
+    assert dict(out.binned) == {}
+
+
+def test_cir_and_angle_of_arrival_tallies_are_built_on_request() -> None:
+    medium = make_medium(_ConstField(0.1, 0.0))
+    source, receiver = collimated(10.0)
+    cfg = SamplingConfig(n_photons=500, estimator="analog", tallies=("cir", "angle_of_arrival"))
+    out = WoodcockDeltaTracker().run(medium, source, receiver, NumpyRng(7), cfg)
+    assert set(out.binned) == {"cir", "angle_of_arrival"}
+    assert out.binned["cir"].values.sum() == pytest.approx(out.tallies.detected_weight)
+    assert out.binned["angle_of_arrival"].values.sum() == pytest.approx(out.tallies.detected_weight)
+
+
+def test_depth_deposition_tally_conserves_absorbed_weight() -> None:
+    medium = make_medium(_ConstField(0.3, 0.0), half=5.0, depth=10.0)
+    source, receiver = collimated(5.0, aperture=0.1, fov=np.pi / 8)
+    cfg = SamplingConfig(n_photons=2000, estimator="analog", tallies=("depth_deposition",))
+    out = WoodcockDeltaTracker().run(medium, source, receiver, NumpyRng(8), cfg)
+    assert set(out.binned) == {"depth_deposition"}
+    assert out.binned["depth_deposition"].values.sum() == pytest.approx(out.tallies.absorbed_weight)
+
+
 def test_reproducible_for_same_seed() -> None:
     medium = make_medium(_ConstField(0.3, 0.7), half=5.0, depth=10.0)
     source, receiver = collimated(5.0, aperture=0.5, fov=np.pi / 4)

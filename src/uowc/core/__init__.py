@@ -7,9 +7,10 @@ from __future__ import annotations
 
 from uowc.core.config import SamplingConfig
 from uowc.core.environment import EnvironmentalState
-from uowc.core.geometry import Receiver, Region, Source
+from uowc.core.geometry import BoundaryOutcome, Receiver, Region, Source
 from uowc.core.ports import (
     Acceleration,
+    Boundary,
     ComparativeMetric,
     Domain,
     Medium,
@@ -64,6 +65,7 @@ __all__ = [
     "Source",
     "Receiver",
     "Region",
+    "BoundaryOutcome",
     "DetectedPhotons",
     "Tallies",
     "TallyResult",
@@ -84,6 +86,7 @@ __all__ = [
     "Domain",
     "Acceleration",
     "Medium",
+    "Boundary",
     "Rng",
     "TransportEngine",
     "Metric",

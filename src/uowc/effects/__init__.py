@@ -6,6 +6,18 @@ refractive-index effect.
 """
 from __future__ import annotations
 
+from uowc.effects.bubbles import BubbleLayerEffect
+from uowc.effects.registry import available_effects, build_effect, build_effects
+from uowc.effects.sediment import SedimentEffect
+from uowc.effects.thermocline import ThermoclineEffect
 from uowc.effects.turbulence import TurbulenceEffect
 
-__all__ = ["TurbulenceEffect"]
+__all__ = [
+    "TurbulenceEffect",
+    "SedimentEffect",
+    "BubbleLayerEffect",
+    "ThermoclineEffect",
+    "build_effect",
+    "build_effects",
+    "available_effects",
+]

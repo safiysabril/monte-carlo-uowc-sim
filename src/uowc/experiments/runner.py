@@ -6,15 +6,13 @@ is run with the same seed (common random numbers). Differences between scenario
 results therefore originate only from the medium representation and the environmental
 effects - never from transport or metrics.
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
 
-import numpy as np
-
-from uowc.core import RawResult, RunMetadata
+from uowc.core import RawResult, RunMetadata, provenance
 from uowc.core.ports import TransportEngine
 from uowc.core.results import MetricValue
 from uowc.core.rng import NumpyRng
@@ -43,7 +41,7 @@ class ScenarioRunner:
     pipeline: MetricPipeline
 
     @classmethod
-    def default(cls) -> "ScenarioRunner":
+    def default(cls) -> ScenarioRunner:
         """Runner with the Woodcock engine and the default metrics pipeline."""
         return cls(engine=WoodcockDeltaTracker(), pipeline=MetricPipeline.default())
 
@@ -69,6 +67,11 @@ class ScenarioRunner:
         parameters: dict[str, float | int | str | bool] = {"seed": config.seed}
         if scenario is Scenario.I:
             parameters["homogenization"] = config.homogenization.name
+        # "unknown" is ExperimentConfig's unset sentinel: auto-detect from git unless
+        # the caller pinned an explicit version (e.g. a frozen release tag).
+        code_version = config.code_version
+        if code_version == "unknown":
+            code_version = provenance.code_version()
         return RunMetadata(
             scenario=scenario.value,
             medium_type=medium_type(scenario),
@@ -78,8 +81,8 @@ class ScenarioRunner:
             sampling=config.sampling,
             seed_tree=rng.seed_tree(),
             rng_impl=type(rng).__name__,
-            timestamp_utc=datetime.now(timezone.utc).isoformat(),
-            code_version=config.code_version,
-            library_versions={"numpy": np.__version__},
+            timestamp_utc=provenance.utc_timestamp(),
+            code_version=code_version,
+            library_versions=provenance.library_versions(),
             parameters=parameters,
         )

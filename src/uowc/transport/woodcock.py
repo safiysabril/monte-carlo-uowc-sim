@@ -31,6 +31,7 @@ from uowc.core import (
 )
 from uowc.core.ports import Medium, Rng
 from uowc.core.units import FloatArray
+from uowc.transport.tallies import build_requested_tallies
 
 __all__ = ["WoodcockDeltaTracker"]
 
@@ -90,18 +91,30 @@ class WoodcockDeltaTracker:
         n_total = int(config.n_photons)
         chunk_size = max(1, int(config.chunk_size))
 
+        want_depth_deposition = "depth_deposition" in config.tallies
+
         times: list[FloatArray] = []
         paths: list[FloatArray] = []
         weights: list[FloatArray] = []
         scatters: list[FloatArray] = []
         incidences: list[FloatArray] = []
+        absorbed_positions: list[FloatArray] = []
+        absorbed_weights: list[FloatArray] = []
         detected = absorbed = escaped = killed = 0.0
 
         start = 0
         chunk_index = 0
         while start < n_total:
             n_chunk = min(chunk_size, n_total - start)
-            result = self._track_chunk(medium, source, receiver, config, rng.spawn(chunk_index), n_chunk)
+            result = self._track_chunk(
+                medium,
+                source,
+                receiver,
+                config,
+                rng.spawn(chunk_index),
+                n_chunk,
+                want_depth_deposition,
+            )
             times.append(result[0])
             paths.append(result[1])
             weights.append(result[2])
@@ -111,6 +124,8 @@ class WoodcockDeltaTracker:
             absorbed += result[6]
             escaped += result[7]
             killed += result[8]
+            absorbed_positions.append(result[9])
+            absorbed_weights.append(result[10])
             start += n_chunk
             chunk_index += 1
 
@@ -129,7 +144,18 @@ class WoodcockDeltaTracker:
             escaped_weight=float(escaped),
             extra={"killed_weight": float(killed)},
         )
-        return TransportOutput(photons=photons, tallies=tallies)
+        binned = build_requested_tallies(
+            config.tallies,
+            photons=photons,
+            absorbed_positions=(
+                np.concatenate(absorbed_positions) if absorbed_positions else np.empty((0, 3))
+            ),
+            absorbed_weights=(
+                np.concatenate(absorbed_weights) if absorbed_weights else np.empty(0)
+            ),
+            domain_bounds=medium.domain.bounds(),
+        )
+        return TransportOutput(photons=photons, tallies=tallies, binned=binned)
 
     @staticmethod
     def _launch(source: Source, n: int, rng: Rng) -> tuple[FloatArray, FloatArray]:
@@ -152,7 +178,11 @@ class WoodcockDeltaTracker:
         config: SamplingConfig,
         rng: Rng,
         n: int,
-    ) -> tuple[FloatArray, FloatArray, FloatArray, FloatArray, FloatArray, float, float, float, float]:
+        want_depth_deposition: bool = False,
+    ) -> tuple[
+        FloatArray, FloatArray, FloatArray, FloatArray, FloatArray,
+        float, float, float, float, FloatArray, FloatArray,
+    ]:
         field = medium.field
         c_max = float(medium.acceleration.majorant(medium.domain.bounds()))
 
@@ -167,6 +197,7 @@ class WoodcockDeltaTracker:
         det_path = np.zeros(n)
         det_incidence = np.zeros(n)
         absorbed = escaped = killed = 0.0
+        absorbed_positions: list[FloatArray] = []
 
         normal = np.asarray(receiver.normal, dtype=np.float64)
         centre = np.asarray(receiver.position, dtype=np.float64)
@@ -243,6 +274,8 @@ class WoodcockDeltaTracker:
                 if u_absorb[j] >= albedo:
                     alive[gi] = False
                     absorbed += 1.0
+                    if want_depth_deposition:
+                        absorbed_positions.append(position[gi].copy())
                     continue
                 scatter[j] = True
                 components = state.iop.scattering.components
@@ -267,6 +300,10 @@ class WoodcockDeltaTracker:
         killed += float(np.count_nonzero(alive))  # any still-live photons hit the iteration cap
 
         keep = detected_mask
+        positions_out = (
+            np.stack(absorbed_positions) if absorbed_positions else np.empty((0, 3))
+        )
+        weights_out = np.ones(len(absorbed_positions))
         return (
             det_time[keep],
             det_path[keep],
@@ -277,4 +314,6 @@ class WoodcockDeltaTracker:
             absorbed,
             escaped,
             killed,
+            positions_out,
+            weights_out,
         )

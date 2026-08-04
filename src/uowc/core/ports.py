@@ -17,7 +17,7 @@ from typing import Protocol, runtime_checkable
 
 from uowc.core.config import SamplingConfig
 from uowc.core.environment import EnvironmentalState
-from uowc.core.geometry import Receiver, Region, Source
+from uowc.core.geometry import BoundaryOutcome, Receiver, Region, Source
 from uowc.core.results import MetricValue, RawResult, SeedTree, TransportOutput
 from uowc.core.state import IOP, LocalOpticalState
 from uowc.core.units import BoolArray, FloatArray, IntArray, Vector3
@@ -32,6 +32,7 @@ __all__ = [
     "Domain",
     "Acceleration",
     "Medium",
+    "Boundary",
     "Rng",
     "TransportEngine",
     "Metric",
@@ -226,6 +227,38 @@ class Medium(Protocol):
 
 
 @runtime_checkable
+class Boundary(Protocol):
+    """What happens when a photon's path reaches a domain boundary (mediums.md:
+    "the domain answers 'is this position inside'; the boundary answers 'what
+    happens on contact'").
+
+    Distinct from :class:`Domain`, which only tests containment. A domain that spans
+    ``z = 0`` has an air-water surface; a domain with a lower bound has a bottom. Not
+    every domain edge needs a ``Boundary`` - an edge with no stated boundary is a pure
+    escape (mediums.md's default domain-edge policy), which is what every current
+    :class:`~uowc.transport.TransportEngine` implements today. A ``Boundary`` is
+    supplied only where photon-boundary interaction (reflection, absorption) is
+    intended, and is not yet consumed by the transport engine (transport.md's
+    "Future Extensions": boundary interaction is planned, after next-event
+    estimation and ray bending).
+    """
+
+    @property
+    def name(self) -> str: ...
+
+    def interact(
+        self,
+        position: Vector3,
+        direction: FloatArray,
+        wavelength_nm: float,
+        rng: Rng,
+    ) -> BoundaryOutcome:
+        """Resolve one photon's contact with this boundary at ``position``, arriving
+        along ``direction`` (unit vector, pointing *toward* the boundary)."""
+        ...
+
+
+@runtime_checkable
 class Rng(Protocol):
     """Seeded, splittable random source for reproducible, parallel-safe sampling.
 
@@ -244,7 +277,7 @@ class Rng(Protocol):
         self, low: int, high: int, shape: int | tuple[int, ...] = 1
     ) -> IntArray: ...
 
-    def spawn(self, stream: int) -> "Rng": ...
+    def spawn(self, stream: int) -> Rng: ...
 
     def seed_tree(self) -> SeedTree: ...
 
