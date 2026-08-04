@@ -24,10 +24,13 @@ Deliberately **not** registered:
 * **Mediums** - fully determined by :class:`~uowc.experiments.scenarios.Scenario` and
   :func:`~uowc.experiments.scenarios.build_medium`; there is nothing to pick by name
   that isn't already picked by the scenario.
-* **Estimators** - :mod:`uowc.transport.estimators` is not yet implemented;
-  :attr:`~uowc.core.config.SamplingConfig.estimator` is consumed directly as a string
-  by the transport engine today, with no separate estimator class to register.
+* **Estimators** - ``"analog"`` and ``"next_event"`` are implemented directly inside
+  :class:`~uowc.transport.woodcock.WoodcockDeltaTracker` (see
+  :mod:`uowc.transport.estimators` for why there is no separate estimator class);
+  :attr:`~uowc.core.config.SamplingConfig.estimator` is consumed as a string by the
+  transport engine, with nothing else to register.
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence

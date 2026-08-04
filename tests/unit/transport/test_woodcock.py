@@ -124,12 +124,14 @@ def test_conforms_to_transport_engine() -> None:
     assert WoodcockDeltaTracker().name == "woodcock"
 
 
-def test_non_analog_estimator_not_implemented() -> None:
+def test_forced_detection_estimator_not_implemented() -> None:
+    # "analog" and "next_event" are both implemented; "forced" (ForcedDetection) is
+    # not - see transport/estimators.py.
     medium = make_medium(_ConstField(0.1, 0.0))
     source, receiver = collimated(10.0)
     with pytest.raises(NotImplementedError):
         WoodcockDeltaTracker().run(
-            medium, source, receiver, NumpyRng(0), SamplingConfig(n_photons=10, estimator="next_event")
+            medium, source, receiver, NumpyRng(0), SamplingConfig(n_photons=10, estimator="forced")
         )
 
 
