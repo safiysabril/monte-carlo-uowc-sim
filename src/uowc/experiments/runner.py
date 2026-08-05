@@ -13,7 +13,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from uowc.core import RawResult, RunMetadata, provenance
-from uowc.core.ports import TransportEngine
+from uowc.core.ports import Medium, TransportEngine
 from uowc.core.results import MetricValue
 from uowc.core.rng import NumpyRng
 from uowc.experiments.config import ExperimentConfig
@@ -50,7 +50,7 @@ class ScenarioRunner:
         medium = build_medium(scenario, config)
         rng = NumpyRng(config.seed)
         output = self.engine.run(medium, config.source, config.receiver, rng, config.sampling)
-        raw = RawResult(output=output, metadata=self._metadata(scenario, config, rng))
+        raw = RawResult(output=output, metadata=self._metadata(scenario, config, rng, medium))
         return ScenarioResult(scenario=scenario, result=raw, metrics=self.pipeline.run(raw))
 
     def run_selected(
@@ -63,7 +63,9 @@ class ScenarioRunner:
         """Execute all three scenarios."""
         return self.run_selected(tuple(Scenario), config)
 
-    def _metadata(self, scenario: Scenario, config: ExperimentConfig, rng: NumpyRng) -> RunMetadata:
+    def _metadata(
+        self, scenario: Scenario, config: ExperimentConfig, rng: NumpyRng, medium: Medium
+    ) -> RunMetadata:
         parameters: dict[str, float | int | str | bool] = {"seed": config.seed}
         if scenario is Scenario.I:
             parameters["homogenization"] = config.homogenization.name
@@ -72,12 +74,23 @@ class ScenarioRunner:
         code_version = config.code_version
         if code_version == "unknown":
             code_version = provenance.code_version()
+        effects = effect_names(scenario, config)
+        effect_parameters = (
+            tuple(provenance.scalar_fields(effect) for effect in config.effects)
+            if scenario is Scenario.III
+            else ()
+        )
         return RunMetadata(
             scenario=scenario.value,
             medium_type=medium_type(scenario),
             optical_model=config.model.name,
-            effects=effect_names(scenario, config),
+            model_parameters=provenance.scalar_fields(config.model),
+            effects=effects,
+            effect_parameters=effect_parameters,
             wavelength_nm=config.wavelength_nm,
+            source=config.source,
+            receiver=config.receiver,
+            majorant=medium.acceleration.majorant(medium.domain.bounds()),
             sampling=config.sampling,
             seed_tree=rng.seed_tree(),
             rng_impl=type(rng).__name__,

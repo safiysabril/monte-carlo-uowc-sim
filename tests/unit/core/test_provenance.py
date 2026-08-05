@@ -1,8 +1,10 @@
 """Git commit, library versions, platform, content-hash, timestamp capture."""
+
 from __future__ import annotations
 
 import re
 import subprocess
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -53,7 +55,9 @@ def test_library_versions_reports_the_hard_dependencies() -> None:
     versions = provenance.library_versions()
     for name in ("python", "numpy", "scipy", "pandas", "pyarrow"):
         assert name in versions
-        assert re.match(r"^\d+\.\d+", versions[name]), f"{name} version looks malformed: {versions[name]!r}"
+        assert re.match(r"^\d+\.\d+", versions[name]), (
+            f"{name} version looks malformed: {versions[name]!r}"
+        )
 
 
 def test_platform_signature_has_three_dash_separated_fields() -> None:
@@ -81,3 +85,82 @@ def test_content_hash_is_a_hex_sha256_digest() -> None:
     digest = provenance.content_hash({"a": 1})
     assert len(digest) == 64
     assert re.match(r"^[0-9a-f]{64}$", digest)
+
+
+# --- scalar_fields -------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class _FakePhase:
+    asymmetry: float
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeModel:
+    wavelength_nm: float
+    label: str
+    enabled: bool
+    phase: _FakePhase
+    samples: object  # e.g. a realized random-field array - not a scalar coefficient
+
+
+def test_scalar_fields_keeps_float_int_str_bool_verbatim() -> None:
+    model = _FakeModel(
+        wavelength_nm=520.0, label="x", enabled=True, phase=_FakePhase(0.5), samples=None
+    )
+    fields = provenance.scalar_fields(model)
+    assert fields["wavelength_nm"] == 520.0
+    assert fields["label"] == "x"
+    assert fields["enabled"] is True
+
+
+def test_scalar_fields_extracts_phase_function_asymmetry() -> None:
+    model = _FakeModel(
+        wavelength_nm=520.0, label="x", enabled=True, phase=_FakePhase(0.924), samples=None
+    )
+    fields = provenance.scalar_fields(model)
+    assert fields["phase_asymmetry"] == pytest.approx(0.924)
+
+
+def test_scalar_fields_skips_non_scalar_non_phase_fields() -> None:
+    import numpy as np
+
+    model = _FakeModel(
+        wavelength_nm=520.0,
+        label="x",
+        enabled=True,
+        phase=_FakePhase(0.0),
+        samples=np.array([1.0, 2.0]),
+    )
+    fields = provenance.scalar_fields(model)
+    assert "samples" not in fields
+
+
+def test_scalar_fields_on_a_real_optical_model() -> None:
+    from uowc.optics import HaltrinModel
+
+    model = HaltrinModel(
+        wavelength_nm=520.0,
+        pure_water_absorption_m_inv=0.1,
+        chlorophyll_specific_absorption_m2_mg=0.04,
+        pure_water_scattering_m_inv=0.02,
+    )
+    fields = provenance.scalar_fields(model)
+    assert fields["wavelength_nm"] == 520.0
+    assert fields["pure_water_absorption_m_inv"] == 0.1
+    assert fields["chlorophyll_absorption_exponent"] == 0.602
+    assert "water_phase_asymmetry" in fields
+    assert "particle_phase_asymmetry" in fields
+
+
+def test_scalar_fields_output_is_json_serializable_for_content_hash() -> None:
+    from uowc.optics import HaltrinModel
+
+    model = HaltrinModel(
+        wavelength_nm=520.0,
+        pure_water_absorption_m_inv=0.1,
+        chlorophyll_specific_absorption_m2_mg=0.04,
+        pure_water_scattering_m_inv=0.02,
+    )
+    # Must not raise: scalar_fields() feeds content_hash() in real provenance use.
+    provenance.content_hash(provenance.scalar_fields(model))

@@ -10,6 +10,7 @@ two equal-weight arrivals separated by ``dt``,
 so the electrical (|H|^2 = 0.5) and optical (|H| = 0.5) 3 dB points have exact,
 independently-derivable values: f = 1/(4*dt) and f = 1/(3*dt) respectively.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -18,14 +19,23 @@ import pytest
 from uowc.core import (
     DetectedPhotons,
     RawResult,
+    Receiver,
     RunMetadata,
     SamplingConfig,
     SeedTree,
+    Source,
     Tallies,
     TransportOutput,
 )
 from uowc.core.ports import Metric
 from uowc.metrics import Bandwidth3dB, FrequencyResponse
+
+_SOURCE = Source(
+    position=[0.0, 0.0, 0.0], direction=[0.0, 0.0, -1.0], wavelength_nm=500.0, divergence_rad=0.0
+)
+_RECEIVER = Receiver(
+    position=[0.0, 0.0, -1.0], normal=[0.0, 0.0, 1.0], aperture_radius_m=1.0, fov_rad=1.0
+)
 
 
 def _raw(times, weights) -> RawResult:
@@ -50,8 +60,13 @@ def _raw(times, weights) -> RawResult:
         scenario="T",
         medium_type="t",
         optical_model="t",
+        model_parameters={},
         effects=(),
+        effect_parameters=(),
         wavelength_nm=500.0,
+        source=_SOURCE,
+        receiver=_RECEIVER,
+        majorant=1.0,
         sampling=SamplingConfig(n_photons=0, estimator="analog"),
         seed_tree=SeedTree(root_seed=0),
         rng_impl="t",

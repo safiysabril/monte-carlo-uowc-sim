@@ -5,13 +5,13 @@ parameters, seed, environmental effects), tallies, binned tallies and metrics ar
 JSON-encoded into the file's schema metadata. Reading reconstructs an equal
 SimulationResult (dtype-preserving), so derived analysis is reproducible from disk.
 """
+
 from __future__ import annotations
 
 import json
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 
@@ -61,8 +61,6 @@ class ParquetResultStore:
 
     def read(self, path: Path) -> SimulationResult:
         table = pq.read_table(str(path))
-        columns = {name: table.column(name).to_numpy(zero_copy_only=False) for name in PHOTON_COLUMNS}
-        photons = photons_from_columns(columns)
 
         raw_metadata = table.schema.metadata or {}
         if _METADATA_KEY not in raw_metadata:
@@ -70,6 +68,11 @@ class ParquetResultStore:
         schema_version, metadata, tallies, binned, metrics = decode_sidecar(
             json.loads(raw_metadata[_METADATA_KEY].decode("utf-8"))
         )
+
+        columns = {
+            name: table.column(name).to_numpy(zero_copy_only=False) for name in PHOTON_COLUMNS
+        }
+        photons = photons_from_columns(columns)
 
         output = TransportOutput(photons=photons, tallies=tallies, binned=binned)
         raw = RawResult(output=output, metadata=metadata, schema_version=schema_version)

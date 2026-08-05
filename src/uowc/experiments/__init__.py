@@ -3,6 +3,7 @@
 The only package that imports concretes from every layer and wires them together.
 Physics models, profiles and effects are injected via :class:`ExperimentConfig`.
 """
+
 from __future__ import annotations
 
 from uowc.experiments.campaign import (
@@ -29,6 +30,13 @@ from uowc.experiments.registry import (
 )
 from uowc.experiments.runner import ScenarioResult, ScenarioRunner
 from uowc.experiments.scenarios import Scenario, build_medium, effect_names, medium_type
+from uowc.experiments.yaml_config import (
+    ConfigError,
+    build_experiment_config,
+    build_homogenization_rule,
+    build_source_and_receiver,
+    load_yaml,
+)
 
 __all__ = [
     "ExperimentConfig",
@@ -55,4 +63,9 @@ __all__ = [
     "ParameterPoint",
     "ProvenanceNode",
     "replicate_seeds",
+    "ConfigError",
+    "build_experiment_config",
+    "build_homogenization_rule",
+    "build_source_and_receiver",
+    "load_yaml",
 ]

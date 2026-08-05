@@ -139,9 +139,11 @@ def test_build_metric_pipeline_runs_end_to_end() -> None:
     from uowc.core import (
         DetectedPhotons,
         RawResult,
+        Receiver,
         RunMetadata,
         SamplingConfig,
         SeedTree,
+        Source,
         Tallies,
         TransportOutput,
     )
@@ -163,8 +165,20 @@ def test_build_metric_pipeline_runs_end_to_end() -> None:
         scenario="T",
         medium_type="t",
         optical_model="t",
+        model_parameters={},
         effects=(),
+        effect_parameters=(),
         wavelength_nm=520.0,
+        source=Source(
+            position=[0.0, 0.0, 0.0],
+            direction=[0.0, 0.0, -1.0],
+            wavelength_nm=520.0,
+            divergence_rad=0.0,
+        ),
+        receiver=Receiver(
+            position=[0.0, 0.0, -1.0], normal=[0.0, 0.0, 1.0], aperture_radius_m=1.0, fov_rad=1.0
+        ),
+        majorant=1.0,
         sampling=SamplingConfig(n_photons=10, estimator="analog"),
         seed_tree=SeedTree(root_seed=0),
         rng_impl="t",

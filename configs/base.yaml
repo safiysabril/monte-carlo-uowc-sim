@@ -12,8 +12,11 @@ geometry: vertical              # see configs/geometries.yaml
 water_type: clear_ocean        # see configs/water_types.yaml
 
 photons:
-  ladder: [1.0e4, 1.0e5, 1.0e6, 1.0e7]   # convergence study
-  production: 1.0e7
+  # PyYAML's SafeLoader only recognizes a float exponent with an explicit sign
+  # (1.0e+4, not 1.0e4) - the unsigned form silently parses as a *string*, not a
+  # number. Written with the sign here for exactly that reason.
+  ladder: [1.0e+4, 1.0e+5, 1.0e+6, 1.0e+7]   # convergence study
+  production: 1.0e+7
 
 transport:
   algorithm: woodcock

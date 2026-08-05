@@ -7,6 +7,7 @@ used in Scenario II so that, for a fair comparison, only the medium representati
 differs. Because the medium is uniform, its Woodcock majorant is exactly the constant
 attenuation - no sampling is needed.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -18,7 +19,7 @@ from uowc.core.ports import Acceleration, Domain, OpticalField, OpticalPropertyM
 from uowc.core.state import IOP
 from uowc.core.units import FloatArray, Vector3
 from uowc.media.domain import BoxDomain
-from uowc.media.homogenization import HomogenizationRule
+from uowc.media.homogenization import HomogenizationRule, depth_span_m
 from uowc.media.profiles import ChlorophyllProfile
 
 __all__ = ["HomogeneousMedium"]
@@ -41,9 +42,7 @@ class _UniformOpticalField:
     def refractive_index(self, positions: FloatArray, time_s: float = 0.0) -> FloatArray:
         return np.full(self._batch_shape(positions), self.refractive_index_value, dtype=np.float64)
 
-    def refractive_index_gradient(
-        self, positions: FloatArray, time_s: float = 0.0
-    ) -> FloatArray:
+    def refractive_index_gradient(self, positions: FloatArray, time_s: float = 0.0) -> FloatArray:
         return np.zeros_like(np.asarray(positions, dtype=np.float64))
 
     def local_state(self, position: Vector3, time_s: float = 0.0) -> LocalOpticalState:
@@ -71,7 +70,7 @@ class HomogeneousMedium:
     @classmethod
     def from_iop(
         cls, *, iop: IOP, bounds: Region, refractive_index: float = 1.34
-    ) -> "HomogeneousMedium":
+    ) -> HomogeneousMedium:
         """Lowest-level constructor: a medium with a directly specified constant IOP."""
         if np.ndim(iop.attenuation) != 0:
             raise ValueError("HomogeneousMedium requires a scalar (spatially constant) IOP")
@@ -90,7 +89,7 @@ class HomogeneousMedium:
         wavelength_nm: float,
         bounds: Region,
         refractive_index: float = 1.34,
-    ) -> "HomogeneousMedium":
+    ) -> HomogeneousMedium:
         """Constant medium from a single chlorophyll value via an optical-property model."""
         if np.ndim(chlorophyll) != 0:
             raise ValueError("chlorophyll must be a single scalar for a homogeneous medium")
@@ -107,15 +106,14 @@ class HomogeneousMedium:
         bounds: Region,
         rule: HomogenizationRule,
         refractive_index: float = 1.34,
-    ) -> "HomogeneousMedium":
+    ) -> HomogeneousMedium:
         """Scenario I baseline from a chlorophyll profile, homogenized by ``rule``.
 
         The profile is collapsed to a single chlorophyll value over the domain's depth
         span (depth = -z), then fed through the same model used in Scenario II - so
         Scenario I and II differ only in how the medium is represented.
         """
-        depth_min_m = -float(np.asarray(bounds.upper)[2])  # surface (z = 0 -> depth 0)
-        depth_max_m = -float(np.asarray(bounds.lower)[2])  # bottom
+        depth_min_m, depth_max_m = depth_span_m(bounds)
         chlorophyll = rule.reduce(profile, depth_min_m, depth_max_m)
         return cls.uniform(
             model=model,

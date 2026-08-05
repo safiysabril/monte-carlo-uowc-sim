@@ -1,7 +1,11 @@
 """Link-geometry value objects and spatial regions."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
+
+import numpy as np
 
 from uowc.core.units import Vector3, as_readonly
 
@@ -32,6 +36,20 @@ class Source:
         object.__setattr__(self, "position", as_readonly(self.position))
         object.__setattr__(self, "direction", as_readonly(self.direction))
 
+    def __eq__(self, other: Any) -> bool:
+        # The dataclass-generated __eq__ would compare array fields with `==`,
+        # which returns an array rather than a bool and raises on a size > 1 array
+        # (numpy's ambiguous-truth-value error) - array fields need elementwise
+        # comparison instead.
+        if not isinstance(other, Source):
+            return NotImplemented
+        return (
+            bool(np.array_equal(self.position, other.position))
+            and bool(np.array_equal(self.direction, other.direction))
+            and self.wavelength_nm == other.wavelength_nm
+            and self.divergence_rad == other.divergence_rad
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class Receiver:
@@ -52,6 +70,17 @@ class Receiver:
     def __post_init__(self) -> None:
         object.__setattr__(self, "position", as_readonly(self.position))
         object.__setattr__(self, "normal", as_readonly(self.normal))
+
+    def __eq__(self, other: Any) -> bool:
+        # See Source.__eq__ - array fields need elementwise comparison, not `==`.
+        if not isinstance(other, Receiver):
+            return NotImplemented
+        return (
+            bool(np.array_equal(self.position, other.position))
+            and bool(np.array_equal(self.normal, other.normal))
+            and self.aperture_radius_m == other.aperture_radius_m
+            and self.fov_rad == other.fov_rad
+        )
 
 
 @dataclass(frozen=True, slots=True)

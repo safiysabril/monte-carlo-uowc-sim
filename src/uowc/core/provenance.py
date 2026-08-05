@@ -7,13 +7,15 @@ reproducibility checklist in research-methodology.md). Reads the ambient environ
 (git, installed packages, platform) at call time; has no side effects beyond a single
 ``git`` subprocess invocation.
 """
+
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 import platform
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +30,7 @@ __all__ = [
     "library_versions",
     "platform_signature",
     "content_hash",
+    "scalar_fields",
 ]
 
 _GIT_TIMEOUT_S = 5.0
@@ -36,7 +39,7 @@ _UNKNOWN = "unknown"
 
 def utc_timestamp() -> str:
     """Current time as an ISO-8601 UTC timestamp."""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _run_git(args: list[str], cwd: Path) -> str:
@@ -101,3 +104,30 @@ def content_hash(parameters: dict[str, Any]) -> str:
     """
     encoded = json.dumps(parameters, sort_keys=True, default=str).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def scalar_fields(obj: Any) -> dict[str, float | int | str | bool]:
+    """Flatten a dataclass's scalar fields into a provenance-recordable dict
+    (data.md: an optical-property model's or effect's "full coefficient set" - not
+    just its name - "must be recoverable").
+
+    Only ``float``/``int``/``str``/``bool`` fields are kept verbatim. A field that is
+    itself a phase function contributes its ``asymmetry`` parameter under
+    ``"<field>_asymmetry"`` (data.md: "phase function(s) and asymmetry parameters").
+    Other non-scalar fields (regions, realized random-field arrays, nested value
+    objects) are silently skipped - they are not "coefficients" in data.md's sense,
+    and a realized field is already reproducible from the seed this framework already
+    records, not from re-serializing its samples.
+
+    Not recursive: a nested dataclass field (other than a phase function) is skipped
+    rather than flattened, since a effect/model composing further dataclasses is not
+    the shape any current model or effect has.
+    """
+    result: dict[str, float | int | str | bool] = {}
+    for f in dataclasses.fields(obj):
+        value = getattr(obj, f.name)
+        if isinstance(value, bool | int | float | str):
+            result[f.name] = value
+        elif hasattr(value, "asymmetry"):
+            result[f"{f.name}_asymmetry"] = float(value.asymmetry)
+    return result

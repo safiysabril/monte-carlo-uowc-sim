@@ -1,13 +1,13 @@
 """Tests for scenario orchestration: shared engine + metrics, fair comparison."""
+
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from uowc.core import Receiver, Region, SamplingConfig, Source
 from uowc.effects import TurbulenceEffect
 from uowc.experiments import ExperimentConfig, Scenario, ScenarioRunner
-from uowc.media import KamedaModel, SurfaceValue
+from uowc.media import DepthAverage, KamedaModel, OpticalDepthPreserving, SurfaceValue
 from uowc.optics import HaltrinModel
 
 WAVELENGTH_NM = 520.0
@@ -26,8 +26,18 @@ def make_config(*, profile, effects=(), homogenization=None, seed=1) -> Experime
     return ExperimentConfig(
         profile=profile,
         model=model,
-        source=Source(position=[0.0, 0.0, 0.0], direction=[0.0, 0.0, -1.0], wavelength_nm=WAVELENGTH_NM, divergence_rad=0.1),
-        receiver=Receiver(position=[0.0, 0.0, -15.0], normal=[0.0, 0.0, 1.0], aperture_radius_m=1.0, fov_rad=np.pi / 4),
+        source=Source(
+            position=[0.0, 0.0, 0.0],
+            direction=[0.0, 0.0, -1.0],
+            wavelength_nm=WAVELENGTH_NM,
+            divergence_rad=0.1,
+        ),
+        receiver=Receiver(
+            position=[0.0, 0.0, -15.0],
+            normal=[0.0, 0.0, 1.0],
+            aperture_radius_m=1.0,
+            fov_rad=np.pi / 4,
+        ),
         bounds=Region(lower=[-30.0, -30.0, -60.0], upper=[30.0, 30.0, 0.0]),
         sampling=SamplingConfig(n_photons=3000, estimator="analog", max_scatter_events=500),
         wavelength_nm=WAVELENGTH_NM,
@@ -38,11 +48,15 @@ def make_config(*, profile, effects=(), homogenization=None, seed=1) -> Experime
 
 
 def dcm_profile() -> KamedaModel:
-    return KamedaModel(background_mg_m3=0.1, peak_integral_mg_m2=40.0, peak_depth_m=40.0, peak_width_m=10.0)
+    return KamedaModel(
+        background_mg_m3=0.1, peak_integral_mg_m2=40.0, peak_depth_m=40.0, peak_width_m=10.0
+    )
 
 
 def flat_profile() -> KamedaModel:
-    return KamedaModel(background_mg_m3=0.3, peak_integral_mg_m2=0.0, peak_depth_m=40.0, peak_width_m=10.0)
+    return KamedaModel(
+        background_mg_m3=0.3, peak_integral_mg_m2=0.0, peak_depth_m=40.0, peak_width_m=10.0
+    )
 
 
 def power(scenario_result) -> float:
@@ -62,7 +76,9 @@ def test_single_scenario_execution() -> None:
 
 
 def test_selected_scenarios_execution() -> None:
-    out = ScenarioRunner.default().run_selected([Scenario.I, Scenario.III], make_config(profile=dcm_profile()))
+    out = ScenarioRunner.default().run_selected(
+        [Scenario.I, Scenario.III], make_config(profile=dcm_profile())
+    )
     assert set(out) == {Scenario.I, Scenario.III}
 
 
@@ -118,7 +134,9 @@ def test_scenario_iii_without_effects_equals_scenario_ii() -> None:
 def test_scenario_iii_turbulence_shifts_time_only() -> None:
     # Turbulence is refractive: it perturbs n (hence arrival time) but not extinction,
     # so the same photons are detected via the same paths with shifted arrival times.
-    turbulence = TurbulenceEffect.isotropic(rms_fluctuation=5e-3, correlation_length_m=5.0, n_modes=128, seed=11)
+    turbulence = TurbulenceEffect.isotropic(
+        rms_fluctuation=5e-3, correlation_length_m=5.0, n_modes=128, seed=11
+    )
     config = make_config(profile=dcm_profile(), effects=(turbulence,))
     runner = ScenarioRunner.default()
     res_ii = runner.run(Scenario.II, config)
@@ -128,7 +146,7 @@ def test_scenario_iii_turbulence_shifts_time_only() -> None:
     p_iii = res_iii.result.output.photons
     assert res_iii.result.metadata.effects == ("turbulence",)
     assert res_ii.result.output.tallies.detected == res_iii.result.output.tallies.detected
-    assert np.array_equal(p_ii.path_length_m, p_iii.path_length_m)   # identical trajectories
+    assert np.array_equal(p_ii.path_length_m, p_iii.path_length_m)  # identical trajectories
     assert np.array_equal(p_ii.n_scatters, p_iii.n_scatters)
     # arrival times shift (relatively); absolute times are ~1e-7 s so compare with atol=0
     assert not np.allclose(p_ii.arrival_time_s, p_iii.arrival_time_s, rtol=1e-7, atol=0.0)
@@ -142,3 +160,40 @@ def test_metadata_records_provenance() -> None:
     assert meta.parameters["homogenization"] == "surface"
     assert meta.seed_tree.root_seed == config.seed
     assert "numpy" in meta.library_versions
+
+
+# --- OpticalDepthPreserving: the IOP-space homogenization rule, end-to-end -----------
+
+
+def test_optical_depth_preserving_runs_scenario_i() -> None:
+    config = make_config(profile=dcm_profile(), homogenization=OpticalDepthPreserving())
+    res = ScenarioRunner.default().run(Scenario.I, config)
+    assert res.result.metadata.medium_type == "homogeneous"
+    assert res.result.metadata.parameters["homogenization"] == "optical_depth"
+
+
+def test_optical_depth_preserving_reproduces_a_constant_profile_exactly() -> None:
+    # mediums.md's profile-collapse test, for the IOP-space rule specifically.
+    config = make_config(profile=flat_profile(), homogenization=OpticalDepthPreserving())
+    runner = ScenarioRunner.default()
+    res_i = runner.run(Scenario.I, config)
+    res_ii = runner.run(Scenario.II, config)
+    assert res_i.result.output.tallies.detected == res_ii.result.output.tallies.detected
+    assert np.array_equal(
+        res_i.result.output.photons.arrival_time_s, res_ii.result.output.photons.arrival_time_s
+    )
+
+
+def test_all_three_homogenization_rules_give_different_scenario_i_baselines() -> None:
+    # research-methodology.md: results should be reported across all implemented
+    # rules, since the spread between them bounds how much of a reported difference
+    # is physics versus a bookkeeping choice - so the three must actually differ for
+    # a profile with real depth structure.
+    runner = ScenarioRunner.default()
+    powers = {
+        rule.name: power(
+            runner.run(Scenario.I, make_config(profile=dcm_profile(), homogenization=rule))
+        )
+        for rule in (SurfaceValue(), DepthAverage(), OpticalDepthPreserving())
+    }
+    assert len(set(powers.values())) == 3, powers

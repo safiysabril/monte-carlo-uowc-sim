@@ -1,4 +1,5 @@
 """Partitioned dataset read/write and filtering."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -6,6 +7,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from uowc.core.geometry import Receiver, Source
 from uowc.core.results import (
     DetectedPhotons,
     MetricValue,
@@ -18,6 +20,13 @@ from uowc.core.results import (
 )
 from uowc.persistence.dataset import PartitionedResultDataset, default_partition
 from uowc.persistence.result import SimulationResult
+
+_SOURCE = Source(
+    position=[0.0, 0.0, 0.0], direction=[0.0, 0.0, -1.0], wavelength_nm=520.0, divergence_rad=0.0
+)
+_RECEIVER = Receiver(
+    position=[0.0, 0.0, -1.0], normal=[0.0, 0.0, 1.0], aperture_radius_m=1.0, fov_rad=1.0
+)
 
 
 def _result(*, scenario: str, seed: int, wavelength_nm: float = 520.0) -> SimulationResult:
@@ -35,8 +44,13 @@ def _result(*, scenario: str, seed: int, wavelength_nm: float = 520.0) -> Simula
         scenario=scenario,
         medium_type="homogeneous",
         optical_model="haltrin",
+        model_parameters={},
         effects=(),
+        effect_parameters=(),
         wavelength_nm=wavelength_nm,
+        source=_SOURCE,
+        receiver=_RECEIVER,
+        majorant=1.0,
         sampling=SamplingConfig(n_photons=1000, estimator="analog"),
         seed_tree=SeedTree(root_seed=seed),
         rng_impl="NumpyRng",

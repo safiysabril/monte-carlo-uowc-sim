@@ -10,13 +10,14 @@ Each builder constructs a :class:`~uowc.core.ports.Medium` from the *shared*
 Only the medium changes between scenarios; the optical model, profile, source,
 receiver, domain and sampling are identical (research-methodology.md).
 """
+
 from __future__ import annotations
 
 from enum import StrEnum
 
 from uowc.core.ports import Medium
 from uowc.experiments.config import ExperimentConfig
-from uowc.media import HomogeneousMedium, InhomogeneousMedium
+from uowc.media import HomogeneousMedium, InhomogeneousMedium, OpticalDepthPreserving, depth_span_m
 
 __all__ = ["Scenario", "build_medium", "medium_type", "effect_names"]
 
@@ -32,6 +33,18 @@ class Scenario(StrEnum):
 def build_medium(scenario: Scenario, config: ExperimentConfig) -> Medium:
     """Build the medium for ``scenario`` from the shared config."""
     if scenario is Scenario.I:
+        if isinstance(config.homogenization, OpticalDepthPreserving):
+            depth_min_m, depth_max_m = depth_span_m(config.bounds)
+            iop = config.homogenization.reduce_iop(
+                profile=config.profile,
+                model=config.model,
+                wavelength_nm=config.wavelength_nm,
+                depth_min_m=depth_min_m,
+                depth_max_m=depth_max_m,
+            )
+            return HomogeneousMedium.from_iop(
+                iop=iop, bounds=config.bounds, refractive_index=config.refractive_index
+            )
         return HomogeneousMedium.from_profile(
             profile=config.profile,
             model=config.model,

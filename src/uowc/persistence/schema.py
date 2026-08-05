@@ -5,6 +5,7 @@ run metadata, binned tallies and metrics) is JSON-encoded into the table's schem
 metadata. Encoding is explicit (not ``asdict``) so it is dtype-preserving and stable
 across schema evolution.
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -13,6 +14,7 @@ from typing import Any
 import numpy as np
 
 from uowc.core.config import SamplingConfig
+from uowc.core.geometry import Receiver, Source
 from uowc.core.results import (
     Axis,
     DetectedPhotons,
@@ -23,7 +25,13 @@ from uowc.core.results import (
     TallyResult,
 )
 
-__all__ = ["PHOTON_COLUMNS", "photons_to_columns", "photons_from_columns", "encode_sidecar", "decode_sidecar"]
+__all__ = [
+    "PHOTON_COLUMNS",
+    "photons_to_columns",
+    "photons_from_columns",
+    "encode_sidecar",
+    "decode_sidecar",
+]
 
 #: Photon table columns and their numpy dtypes (dtype-preserving round-trip).
 PHOTON_COLUMNS: dict[str, Any] = {
@@ -69,7 +77,10 @@ def _encode_value(value: Any) -> Any:
             return {"__complex__": [float(array.real), float(array.imag)]}
         return float(array)
     if np.iscomplexobj(array):
-        return {"__ndarray__": {"real": array.real.tolist(), "imag": array.imag.tolist()}, "dtype": str(array.dtype)}
+        return {
+            "__ndarray__": {"real": array.real.tolist(), "imag": array.imag.tolist()},
+            "dtype": str(array.dtype),
+        }
     return {"__ndarray__": array.tolist(), "dtype": str(array.dtype)}
 
 
@@ -116,13 +127,54 @@ def _seed_tree_from_dict(d: Mapping[str, Any]) -> SeedTree:
     return SeedTree(root_seed=d["root_seed"], streams=dict(d["streams"]))
 
 
+def _source_to_dict(source: Source) -> dict[str, Any]:
+    return {
+        "position": np.asarray(source.position).tolist(),
+        "direction": np.asarray(source.direction).tolist(),
+        "wavelength_nm": source.wavelength_nm,
+        "divergence_rad": source.divergence_rad,
+    }
+
+
+def _source_from_dict(d: Mapping[str, Any]) -> Source:
+    return Source(
+        position=np.asarray(d["position"], dtype=np.float64),
+        direction=np.asarray(d["direction"], dtype=np.float64),
+        wavelength_nm=d["wavelength_nm"],
+        divergence_rad=d["divergence_rad"],
+    )
+
+
+def _receiver_to_dict(receiver: Receiver) -> dict[str, Any]:
+    return {
+        "position": np.asarray(receiver.position).tolist(),
+        "normal": np.asarray(receiver.normal).tolist(),
+        "aperture_radius_m": receiver.aperture_radius_m,
+        "fov_rad": receiver.fov_rad,
+    }
+
+
+def _receiver_from_dict(d: Mapping[str, Any]) -> Receiver:
+    return Receiver(
+        position=np.asarray(d["position"], dtype=np.float64),
+        normal=np.asarray(d["normal"], dtype=np.float64),
+        aperture_radius_m=d["aperture_radius_m"],
+        fov_rad=d["fov_rad"],
+    )
+
+
 def _metadata_to_dict(metadata: RunMetadata) -> dict[str, Any]:
     return {
         "scenario": metadata.scenario,
         "medium_type": metadata.medium_type,
         "optical_model": metadata.optical_model,
+        "model_parameters": dict(metadata.model_parameters),
         "effects": list(metadata.effects),
+        "effect_parameters": [dict(p) for p in metadata.effect_parameters],
         "wavelength_nm": metadata.wavelength_nm,
+        "source": _source_to_dict(metadata.source),
+        "receiver": _receiver_to_dict(metadata.receiver),
+        "majorant": metadata.majorant,
         "sampling": _sampling_to_dict(metadata.sampling),
         "seed_tree": _seed_tree_to_dict(metadata.seed_tree),
         "rng_impl": metadata.rng_impl,
@@ -138,8 +190,13 @@ def _metadata_from_dict(d: Mapping[str, Any]) -> RunMetadata:
         scenario=d["scenario"],
         medium_type=d["medium_type"],
         optical_model=d["optical_model"],
+        model_parameters=dict(d["model_parameters"]),
         effects=tuple(d["effects"]),
+        effect_parameters=tuple(dict(p) for p in d["effect_parameters"]),
         wavelength_nm=d["wavelength_nm"],
+        source=_source_from_dict(d["source"]),
+        receiver=_receiver_from_dict(d["receiver"]),
+        majorant=d["majorant"],
         sampling=_sampling_from_dict(d["sampling"]),
         seed_tree=_seed_tree_from_dict(d["seed_tree"]),
         rng_impl=d["rng_impl"],
@@ -201,7 +258,10 @@ def _metric_to_dict(metric: MetricValue) -> dict[str, Any]:
         "std": _encode_value(metric.std),
         "ci95_low": _encode_value(metric.ci95_low),
         "ci95_high": _encode_value(metric.ci95_high),
-        "axes": [{"name": a.name, "values": np.asarray(a.values).tolist(), "unit": a.unit} for a in metric.axes],
+        "axes": [
+            {"name": a.name, "values": np.asarray(a.values).tolist(), "unit": a.unit}
+            for a in metric.axes
+        ],
     }
 
 

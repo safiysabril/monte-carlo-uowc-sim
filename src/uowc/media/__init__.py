@@ -3,13 +3,20 @@
 Profiles map depth to environmental parameters; mediums organize optical properties
 in space. Depends on the core ports and value objects only.
 """
+
 from __future__ import annotations
 
 from uowc.media.boundaries import AirWaterSurface, LambertianBottom
 from uowc.media.domain import BoxDomain
 from uowc.media.fields import ExtrapolationPolicy, GriddedScalarField
 from uowc.media.homogeneous import HomogeneousMedium
-from uowc.media.homogenization import DepthAverage, HomogenizationRule, SurfaceValue
+from uowc.media.homogenization import (
+    DepthAverage,
+    HomogenizationRule,
+    OpticalDepthPreserving,
+    SurfaceValue,
+    depth_span_m,
+)
 from uowc.media.inhomogeneous import InhomogeneousMedium
 from uowc.media.profiles import ChlorophyllProfile, KamedaModel
 
@@ -24,6 +31,8 @@ __all__ = [
     "HomogenizationRule",
     "SurfaceValue",
     "DepthAverage",
+    "OpticalDepthPreserving",
+    "depth_span_m",
     "HomogeneousMedium",
     "InhomogeneousMedium",
 ]

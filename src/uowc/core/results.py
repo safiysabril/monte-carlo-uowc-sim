@@ -1,4 +1,5 @@
 """Result schemas: the transport -> metrics -> storage seam."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -8,6 +9,7 @@ from types import MappingProxyType
 import numpy as np
 
 from uowc.core.config import SamplingConfig
+from uowc.core.geometry import Receiver, Source
 from uowc.core.units import ComplexArray, FloatArray, IntArray, as_readonly, freeze_value
 
 __all__ = [
@@ -24,12 +26,16 @@ __all__ = [
 ]
 
 #: Version of the result/metadata schema; bump on any breaking change (see data.md).
-SCHEMA_VERSION = 1
+#: v2: RunMetadata gained source, receiver, model_parameters, effect_parameters and
+#: majorant - data.md's metadata checklist items that v1 recorded only partially
+#: (optical model and effects by name only) or not at all (source/receiver geometry,
+#: the majorant actually used).
+SCHEMA_VERSION = 2
 
 _EMPTY_F: Mapping[str, float] = MappingProxyType({})
 _EMPTY_S: Mapping[str, str] = MappingProxyType({})
 _EMPTY_P: Mapping[str, float | int | str | bool] = MappingProxyType({})
-_EMPTY_T: Mapping[str, "TallyResult"] = MappingProxyType({})
+_EMPTY_T: Mapping[str, TallyResult] = MappingProxyType({})
 _EMPTY_I: Mapping[str, int] = MappingProxyType({})
 
 
@@ -121,15 +127,34 @@ class SeedTree:
 class RunMetadata:
     """Everything needed to reproduce a run (see data.md, research-methodology.md).
 
-    Provenance is typed: the sampling config and seed tree are first-class, and
-    ``parameters`` is restricted to serializable scalar types rather than ``object``.
+    Provenance is typed: the sampling config, seed tree, source and receiver are
+    first-class, and the remaining scalar coefficient sets (``model_parameters``,
+    each entry of ``effect_parameters``, ``parameters``) are restricted to
+    serializable scalar types rather than ``object`` (see
+    :func:`~uowc.core.provenance.scalar_fields`, which builds them).
+
+    ``effect_parameters`` is positional-matched with ``effects``: entry ``i`` is the
+    scalar coefficient set of the effect named ``effects[i]``, in the same
+    composition order the medium applied them in (data.md: effects, "their
+    parameters, and their composition order").
+
+    ``majorant`` is the Woodcock bound the transport engine actually used for this
+    run [m^-1] (data.md: "Majorant (the value actually used)") - not a value that
+    could be recomputed from the other fields alone when a medium samples its bound
+    (:class:`~uowc.media.inhomogeneous._SampledMajorant`), since that depends on the
+    sampling resolution as well as the physics.
     """
 
     scenario: str
     medium_type: str
     optical_model: str
+    model_parameters: Mapping[str, float | int | str | bool]
     effects: tuple[str, ...]
+    effect_parameters: tuple[Mapping[str, float | int | str | bool], ...]
     wavelength_nm: float
+    source: Source
+    receiver: Receiver
+    majorant: float
     sampling: SamplingConfig
     seed_tree: SeedTree
     rng_impl: str
